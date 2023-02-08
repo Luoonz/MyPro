@@ -24,8 +24,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
-    private val viewModel: MainViewModel by viewModels()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -37,29 +35,6 @@ class MainActivity : AppCompatActivity() {
             login()
         }
 
-
-        binding.recyclerView.apply {
-            layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter = TodoAdapter(
-                emptyList(),
-                onClickDeleteIcon = {
-                    viewModel.deleteTodo(it)
-                },
-                onClickItem = {
-                    viewModel.toggleTodo(it)
-                }
-            )
-        }
-
-        binding.addButton.setOnClickListener {
-            val todo = Todo(binding.editText.text.toString())
-            viewModel.addTodo(todo)
-        }
-
-        // 관찰 UI 업데이트
-        viewModel.todoLiveData.observe(this, Observer {
-            (binding.recyclerView.adapter as TodoAdapter).setData(it)
-        })
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -70,7 +45,6 @@ class MainActivity : AppCompatActivity() {
 
             if (resultCode == Activity.RESULT_OK) {
                 // Successfully signed in
-                viewModel.fetchData()
             } else {
                 // 로그인 실패
                 finish()
@@ -114,106 +88,4 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-}
-
-data class Todo(
-    val text: String,
-    var isDone: Boolean = false
-)
-
-class TodoAdapter(
-    private var myDataset: List<DocumentSnapshot>,
-    val onClickDeleteIcon: (todo: DocumentSnapshot) -> Unit,
-    val onClickItem: (todo: DocumentSnapshot) -> Unit
-) :
-    RecyclerView.Adapter<TodoAdapter.TodoViewHolder>() {
-
-    class TodoViewHolder(val binding: ItemTodoBinding) : RecyclerView.ViewHolder(binding.root)
-
-
-    override fun onCreateViewHolder(
-        parent: ViewGroup,
-        viewType: Int
-    ): TodoAdapter.TodoViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_todo, parent, false)
-        return TodoViewHolder(ItemTodoBinding.bind(view))
-    }
-
-    override fun onBindViewHolder(holder: TodoViewHolder, position: Int) {
-        val todo = myDataset[position]
-        holder.binding.todoText.text = todo.getString("text") ?: ""
-
-        if ((todo.getBoolean("isDone") ?: false) == true) {
-            holder.binding.todoText.apply {
-                paintFlags = paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
-                setTypeface(null, Typeface.ITALIC)
-            }
-        } else {
-            holder.binding.todoText.apply {
-                paintFlags = 0
-                setTypeface(null, Typeface.NORMAL)
-            }
-        }
-
-        holder.binding.deleteImageView.setOnClickListener {
-            onClickDeleteIcon.invoke(todo)
-        }
-
-        holder.binding.root.setOnClickListener {
-            onClickItem.invoke(todo)
-        }
-    }
-
-    override fun getItemCount() = myDataset.size
-
-    fun setData(newData: List<DocumentSnapshot>) {
-        myDataset = newData
-        notifyDataSetChanged()
-    }
-}
-
-class MainViewModel: ViewModel() {
-    val db = Firebase.firestore
-
-    val todoLiveData = MutableLiveData<List<DocumentSnapshot>>()
-
-    init {
-        fetchData()
-    }
-
-    fun fetchData() {
-        val user = FirebaseAuth.getInstance().currentUser
-        if (user != null) {
-            db.collection(user.uid)
-                .addSnapshotListener { value, e ->
-                    if (e != null) {
-                        return@addSnapshotListener
-                    }
-
-                    if (value != null) {
-                        todoLiveData.value = value.documents
-                    }
-                }
-        }
-    }
-
-    fun toggleTodo(todo: DocumentSnapshot) {
-        FirebaseAuth.getInstance().currentUser?.let { user ->
-            val isDone = todo.getBoolean("isDone") ?: false
-            db.collection(user.uid).document(todo.id).update("isDone", !isDone)
-        }
-    }
-
-    fun addTodo(todo: Todo) {
-        FirebaseAuth.getInstance().currentUser?.let { user ->
-            db.collection(user.uid).add(todo)
-        }
-    }
-
-    fun deleteTodo(todo: DocumentSnapshot) {
-        FirebaseAuth.getInstance().currentUser?.let { user ->
-            db.collection(user.uid).document(todo.id).delete()
-        }
-    }
 }
